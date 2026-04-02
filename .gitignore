@@ -1,0 +1,48 @@
+# Ansible sensitive files
+ansible/inventory.ini
+ansible/.vault_pass
+inventory.ini
+.vault_pass
+
+# Node dependencies
+node_modules/
+npm-debug.log*
+
+# Environment files
+.env
+.env.*
+.venv/
+
+# Python caches and tooling artifacts
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+
+# Ansible local/runtime artifacts
+.ansible/
+ansible/*.retry
+
+# Terraform sensitive files
+terraform/.terraform/
+terraform/terraform.tfstate
+terraform/terraform.tfstate.backup
+terraform/.terraform.lock.hcl
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+awscliv2.zip
+terraform.tfstate
+
+# Terraform aws subfolder
+terraform/aws/.terraform/
+terraform/aws/terraform.tfstate
+terraform/aws/terraform.tfstate.backup
+terraform/aws/terraform-provider-aws*
+terraform/aws/*.zip
+terraform/aws/terraform.tfvars

@@ -1,0 +1,18 @@
+---
+- name: Prepare system (common)
+  hosts: web
+  become: true
+  roles:
+    - common
+
+- name: Install and configure Nginx
+  hosts: web
+  become: true
+  roles:
+    - nginx
+
+- name: Deploy EpicBook app
+  hosts: web
+  become: true
+  roles:
+    - epicbook

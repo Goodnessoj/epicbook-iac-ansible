@@ -1,0 +1,172 @@
+---
+- name: Create app directory
+  file:
+    path: "{{ app_dest }}"
+    state: directory
+    owner: "{{ app_user }}"
+    group: "{{ app_group }}"
+    mode: "0755"
+
+- name: Check configured git safe directories
+  command: git config --global --get-all safe.directory
+  register: git_safe_dirs
+  changed_when: false
+  failed_when: false
+
+- name: Add safe directory for git
+  command: git config --global --add safe.directory {{ app_dest }}
+  when: app_dest not in git_safe_dirs.stdout_lines
+
+- name: Clone EpicBook repo from GitHub
+  git:
+    repo: "{{ app_repo }}"
+    dest: "{{ app_dest }}"
+    version: main
+    update: false
+  notify: Restart EpicBook app
+
+- name: Install Node.js and npm
+  apt:
+    name:
+      - nodejs
+      - npm
+    state: present
+
+- name: Install MySQL client and Python dependencies
+  apt:
+    name:
+      - mysql-client
+      - python3-mysqldb
+      - python3-pymysql
+    state: present
+
+- name: Check if database is already seeded
+  command: >
+    mysql -h {{ db_host }} -u {{ db_user }} -p'{{ db_password }}'
+    -e "SELECT COUNT(*) FROM information_schema.tables
+    WHERE table_schema='{{ db_name }}';" --skip-column-names
+  register: table_count
+  changed_when: false
+  ignore_errors: true
+
+- name: Run database schema
+  shell: >
+    mysql -h {{ db_host }} -u {{ db_user }} -p'{{ db_password }}'
+    {{ db_name }} < {{ app_dest }}/db/BuyTheBook_Schema.sql
+  when: table_count.stdout | trim == "0" or table_count.failed
+  become: true
+
+- name: Run author seed
+  shell: >
+    mysql -h {{ db_host }} -u {{ db_user }} -p'{{ db_password }}'
+    {{ db_name }} < {{ app_dest }}/db/author_seed.sql
+  when: table_count.stdout | trim == "0" or table_count.failed
+  become: true
+
+- name: Run books seed
+  shell: >
+    mysql -h {{ db_host }} -u {{ db_user }} -p'{{ db_password }}'
+    {{ db_name }} < {{ app_dest }}/db/books_seed.sql
+  when: table_count.stdout | trim == "0" or table_count.failed
+  become: true
+
+- name: Install app dependencies
+  npm:
+    path: "{{ app_dest }}"
+
+- name: Create .env file
+  copy:
+    dest: "{{ app_dest }}/.env"
+    content: |
+      PORT={{ app_port }}
+      DB_HOST={{ db_host }}
+      DB_USER={{ db_user }}
+      DB_PASSWORD={{ db_password }}
+      DB_NAME={{ db_name }}
+    owner: "{{ app_user }}"
+    group: "{{ app_group }}"
+    mode: "0640"
+  notify: Restart EpicBook app
+
+- name: Update config.json with DB credentials
+  copy:
+    dest: "{{ app_dest }}/config/config.json"
+    content: |
+      {
+        "development": {
+          "username": "{{ db_user }}",
+          "password": "{{ db_password }}",
+          "database": "{{ db_name }}",
+          "host": "{{ db_host }}",
+          "dialect": "mysql"
+        },
+        "production": {
+          "username": "{{ db_user }}",
+          "password": "{{ db_password }}",
+          "database": "{{ db_name }}",
+          "host": "{{ db_host }}",
+          "dialect": "mysql"
+        }
+      }
+    owner: "{{ app_user }}"
+    group: "{{ app_group }}"
+    mode: "0640"
+  notify: Restart EpicBook app
+
+- name: Ensure app root ownership
+  file:
+    path: "{{ app_dest }}"
+    owner: "{{ app_user }}"
+    group: "{{ app_group }}"
+
+- name: Install pm2 globally
+  npm:
+    name: pm2
+    global: true
+
+- name: Create pm2 home directory for user
+  file:
+    path: /var/www/.pm2
+    state: directory
+    owner: "{{ app_user }}"
+    group: "{{ app_group }}"
+    mode: "0755"
+  become: true
+
+- name: Check PM2 process state
+  command: pm2 describe epicbook
+  register: pm2_process
+  changed_when: false
+  failed_when: false
+  become: true
+  become_user: "{{ app_user }}"
+  environment:
+    PM2_HOME: /var/www/.pm2
+
+- name: Start app with pm2 if missing
+  command: pm2 start server.js --name epicbook
+  args:
+    chdir: "{{ app_dest }}"
+  when: pm2_process.rc != 0
+  environment:
+    PORT: "{{ app_port }}"
+    PM2_HOME: /var/www/.pm2
+  become: true
+  become_user: "{{ app_user }}"
+
+- name: Save pm2 process list after first start
+  command: pm2 save
+  when: pm2_process.rc != 0
+  changed_when: false
+  become: true
+  become_user: "{{ app_user }}"
+  environment:
+    PM2_HOME: /var/www/.pm2
+
+- name: Configure pm2 to start on boot
+  command: pm2 startup systemd -u {{ app_user }} --hp /var/www/.pm2
+  args:
+    creates: /etc/systemd/system/pm2-{{ app_user }}.service
+  become: true
+  environment:
+    PM2_HOME: /var/www/.pm2

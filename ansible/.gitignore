@@ -1,0 +1,27 @@
+# Ansible sensitive files
+ansible/inventory.ini
+ansible/.vault_pass
+inventory.ini
+.vault_pass
+
+# Node dependencies
+node_modules/
+npm-debug.log*
+
+# Environment files
+.env
+.env.*
+
+# Terraform sensitive files
+terraform/.terraform/
+terraform/terraform.tfstate
+terraform/terraform.tfstate.backup
+terraform/.terraform.lock.hcl
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/

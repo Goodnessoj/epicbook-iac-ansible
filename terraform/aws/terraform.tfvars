@@ -3,7 +3,6 @@ resource_prefix     = "epicbook"
 instance_type       = "t3.micro"
 admin_username      = "ubuntu"
 ssh_public_key_path = "~/.ssh/id_rsa_epicbook.pub"
-
 db_name             = "bookstore"
 db_user             = "epicbook_user"
-db_password         = "REPLACE_WITH_STRONG_PASSWORD"
+db_password         = "Buytoken2"

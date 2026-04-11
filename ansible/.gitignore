@@ -1,27 +1,25 @@
-# Ansible sensitive files
-ansible/inventory.ini
-ansible/.vault_pass
-inventory.ini
-.vault_pass
+# Ansible
+*.retry
+*.log
+.vagrant/
 
-# Node dependencies
-node_modules/
-npm-debug.log*
+# Terraform (if applicable)
+*.tfstate
+*.tfstate.backup
+.terraform/
 
-# Environment files
-.env
-.env.*
-
-# Terraform sensitive files
-terraform/.terraform/
-terraform/terraform.tfstate
-terraform/terraform.tfstate.backup
-terraform/.terraform.lock.hcl
-
-# OS files
+# OS generated files
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
 Thumbs.db
 
-# Logs
-*.log
-logs/
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+

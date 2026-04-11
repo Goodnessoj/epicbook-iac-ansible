@@ -1,19 +1,14 @@
 ---
-- name: Restart EpicBook app process
-  command: pm2 restart epicbook
+- name: Reload Nginx
+  service:
+    name: nginx
+    state: reloaded
+
+- name: Restart EpicBook app
+  command: pm2 restart epicbook --update-env
   args:
     chdir: "{{ app_dest }}"
   become: true
   become_user: "{{ app_user }}"
   environment:
-    PM2_HOME: /var/www/.pm2
-  listen: Restart EpicBook app
-
-- name: Save PM2 process list
-  command: pm2 save
-  become: true
-  become_user: "{{ app_user }}"
-  changed_when: false
-  environment:
-    PM2_HOME: /var/www/.pm2
-  listen: Restart EpicBook app
+    PM2_HOME: "{{ pm2_home }}"

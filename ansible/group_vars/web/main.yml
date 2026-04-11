@@ -5,5 +5,7 @@ app_user: "www-data"
 app_group: "www-data"
 nginx_site_name: "epicbook"
 app_port: 3000
-db_user: "admin"
+db_user: "epicbook_user"
 db_name: "bookstore"
+pm2_home: "/var/www/.pm2"
+db_password: "Buytoken2"

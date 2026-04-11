@@ -209,8 +209,17 @@ ${aws_eip.main.public_ip}
 ansible_user=${var.admin_username}
 ansible_ssh_private_key_file=${replace(pathexpand(var.ssh_public_key_path), ".pub", "")}
 ansible_python_interpreter=/usr/bin/python3
-db_host=${aws_db_instance.main.address}
 EOT
 
   filename = "../../ansible/inventory.ini"
+}
+
+# Ansible Group Variables Generation
+resource "local_file" "ansible_web_group_vars" {
+  content = <<EOT
+---
+db_host: "${aws_db_instance.main.address}"
+EOT
+
+  filename = "../../ansible/group_vars/web.yml"
 }

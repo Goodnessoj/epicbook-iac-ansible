@@ -1,13 +1,50 @@
 ---
+- name: Ensure Ansible remote tmp directory exists
+  file:
+    path: /tmp/ansible-tmp
+    state: directory
+    mode: '0777'
+  become: yes
+
 - name: Update apt cache
   apt:
     update_cache: yes
     cache_valid_time: 3600
+  become: yes
+  environment:
+    DEBIAN_FRONTEND: noninteractive
 
-- name: Upgrade all packages
+- name: Remove conflicting nodejs/npm packages before setup
   apt:
-    upgrade: dist
-    autoremove: yes
+    name:
+      - nodejs
+      - npm
+      - node-gyp
+      - node-cacache
+      - node-mkdirp
+      - node-nopt
+      - node-tar
+      - node-which
+      - libnode-dev
+      - libnode72
+    state: absent
+    purge: yes
+  ignore_errors: yes
+  become: yes
+  environment:
+    DEBIAN_FRONTEND: noninteractive
+
+- name: Fix broken package dependencies
+  command: /usr/bin/apt-get install -f -y
+  become: yes
+  environment:
+    DEBIAN_FRONTEND: noninteractive
+
+- name: Autoremove leftover packages
+  command: /usr/bin/apt-get autoremove -y
+  become: yes
+  environment:
+    DEBIAN_FRONTEND: noninteractive
 
 - name: Install baseline packages
   apt:
@@ -16,7 +53,68 @@
       - curl
       - unzip
       - software-properties-common
+      - acl
+      - python3-mysqldb
+      - python3-pymysql
     state: present
+  become: yes
+  environment:
+    DEBIAN_FRONTEND: noninteractive
+
+- name: Add NodeSource repository for Node.js 20
+  shell: curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+  args:
+    creates: /etc/apt/sources.list.d/nodesource.list
+    executable: /bin/bash
+  become: yes
+  environment:
+    DEBIAN_FRONTEND: noninteractive
+
+- name: Install Node.js (npm is bundled, do NOT install npm separately)
+  apt:
+    name:
+      - nodejs
+    state: present
+    update_cache: yes
+  become: yes
+  environment:
+    DEBIAN_FRONTEND: noninteractive
+
+- name: Verify Node.js and npm versions
+  command: "{{ item }}"
+  loop:
+    - node --version
+    - npm --version
+  register: node_version
+  changed_when: false
+
+- name: Ensure www-data home directory exists
+  file:
+    path: /var/www
+    state: directory
+    owner: www-data
+    group: www-data
+    mode: '0755'
+  become: yes
+
+- name: Ensure www-data ansible tmp directory exists
+  file:
+    path: /var/www/.ansible/tmp
+    state: directory
+    owner: www-data
+    group: www-data
+    mode: '0755'
+    recurse: yes
+  become: yes
+
+- name: Ensure www-data pm2 home directory exists
+  file:
+    path: /var/www/.pm2
+    state: directory
+    owner: www-data
+    group: www-data
+    mode: '0755'
+  become: yes
 
 - name: Disable root SSH login
   lineinfile:
@@ -24,6 +122,7 @@
     regexp: '^PermitRootLogin'
     line: 'PermitRootLogin no'
     state: present
+  become: yes
   notify: Restart SSH
 
 - name: Disable password authentication
@@ -32,4 +131,5 @@
     regexp: '^PasswordAuthentication'
     line: 'PasswordAuthentication no'
     state: present
+  become: yes
   notify: Restart SSH

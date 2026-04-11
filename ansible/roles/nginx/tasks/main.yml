@@ -4,6 +4,7 @@
     name: nginx
     state: present
     update_cache: yes
+  become: yes
 
 - name: Deploy Nginx site config from template
   template:
@@ -12,6 +13,7 @@
     owner: root
     group: root
     mode: "0644"
+  become: yes
   notify: Reload Nginx
 
 - name: Enable the site (symlink to sites-enabled)
@@ -20,12 +22,14 @@
     dest: /etc/nginx/sites-enabled/{{ nginx_site_name }}
     state: link
     force: yes
+  become: yes
   notify: Reload Nginx
 
 - name: Remove default Nginx site
   file:
     path: /etc/nginx/sites-enabled/default
     state: absent
+  become: yes
   notify: Reload Nginx
 
 - name: Ensure Nginx is started and enabled
@@ -33,3 +37,4 @@
     name: nginx
     state: started
     enabled: yes
+  become: yes

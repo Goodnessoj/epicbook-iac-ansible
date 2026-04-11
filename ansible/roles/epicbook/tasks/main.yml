@@ -6,6 +6,7 @@
     owner: "{{ app_user }}"
     group: "{{ app_group }}"
     mode: "0755"
+  become: yes
 
 - name: Check configured git safe directories
   command: git config --global --get-all safe.directory
@@ -23,14 +24,13 @@
     dest: "{{ app_dest }}"
     version: main
     update: false
+  become: yes
+  become_user: "{{ app_user }}"
   notify: Restart EpicBook app
 
-- name: Install Node.js and npm
-  apt:
-    name:
-      - nodejs
-      - npm
-    state: present
+- name: Verify Node.js and npm are available
+  command: node --version
+  changed_when: false
 
 - name: Install MySQL client and Python dependencies
   apt:
@@ -38,41 +38,78 @@
       - mysql-client
       - python3-mysqldb
       - python3-pymysql
+      - acl
     state: present
+  become: yes
 
 - name: Check if database is already seeded
-  command: >
-    mysql -h {{ db_host }} -u {{ db_user }} -p'{{ db_password }}'
-    -e "SELECT COUNT(*) FROM information_schema.tables
-    WHERE table_schema='{{ db_name }}';" --skip-column-names
+  shell: |
+    mysql -h {{ db_host }} -P 3306 -u {{ db_user }} --ssl-mode=REQUIRED -p'{{ db_password }}' \
+    -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='{{ db_name }}'" \
+    --skip-column-names
   register: table_count
   changed_when: false
   ignore_errors: true
 
 - name: Run database schema
   shell: >
-    mysql -h {{ db_host }} -u {{ db_user }} -p'{{ db_password }}'
+    mysql -h {{ db_host }} -P 3306 -u {{ db_user }} --ssl-mode=REQUIRED -p'{{ db_password }}'
     {{ db_name }} < {{ app_dest }}/db/BuyTheBook_Schema.sql
   when: table_count.stdout | trim == "0" or table_count.failed
-  become: true
+  become: yes
 
 - name: Run author seed
   shell: >
-    mysql -h {{ db_host }} -u {{ db_user }} -p'{{ db_password }}'
+    mysql -h {{ db_host }} -P 3306 -u {{ db_user }} --ssl-mode=REQUIRED -p'{{ db_password }}'
     {{ db_name }} < {{ app_dest }}/db/author_seed.sql
   when: table_count.stdout | trim == "0" or table_count.failed
-  become: true
+  become: yes
 
 - name: Run books seed
   shell: >
-    mysql -h {{ db_host }} -u {{ db_user }} -p'{{ db_password }}'
+    mysql -h {{ db_host }} -P 3306 -u {{ db_user }} --ssl-mode=REQUIRED -p'{{ db_password }}'
     {{ db_name }} < {{ app_dest }}/db/books_seed.sql
   when: table_count.stdout | trim == "0" or table_count.failed
-  become: true
+  become: yes
+
+- name: Ensure app root ownership before npm install
+  file:
+    path: "{{ app_dest }}"
+    owner: "{{ app_user }}"
+    group: "{{ app_group }}"
+    recurse: yes
+  become: yes
+
+- name: Remove existing node_modules if present
+  file:
+    path: "{{ app_dest }}/node_modules"
+    state: absent
+  become: yes
+
+- name: Remove package-lock.json for clean install
+  file:
+    path: "{{ app_dest }}/package-lock.json"
+    state: absent
+  become: yes
+
+- name: Ensure npm cache directory exists
+  file:
+    path: "/home/{{ app_user }}/.npm"
+    state: directory
+    owner: "{{ app_user }}"
+    group: "{{ app_group }}"
+    mode: "0755"
+  become: yes
 
 - name: Install app dependencies
-  npm:
-    path: "{{ app_dest }}"
+  command: npm install
+  args:
+    chdir: "{{ app_dest }}"
+  become: yes
+  become_user: "{{ app_user }}"
+  environment:
+    HOME: "/home/{{ app_user }}"
+    npm_config_cache: "/home/{{ app_user }}/.npm"
 
 - name: Create .env file
   copy:
@@ -86,6 +123,7 @@
     owner: "{{ app_user }}"
     group: "{{ app_group }}"
     mode: "0640"
+  become: yes
   notify: Restart EpicBook app
 
 - name: Update config.json with DB credentials
@@ -98,19 +136,32 @@
           "password": "{{ db_password }}",
           "database": "{{ db_name }}",
           "host": "{{ db_host }}",
-          "dialect": "mysql"
+          "dialect": "mysql",
+          "dialectOptions": {
+            "ssl": {
+              "require": true,
+              "rejectUnauthorized": false
+            }
+          }
         },
         "production": {
           "username": "{{ db_user }}",
           "password": "{{ db_password }}",
           "database": "{{ db_name }}",
           "host": "{{ db_host }}",
-          "dialect": "mysql"
+          "dialect": "mysql",
+          "dialectOptions": {
+            "ssl": {
+              "require": true,
+              "rejectUnauthorized": false
+            }
+          }
         }
       }
     owner: "{{ app_user }}"
     group: "{{ app_group }}"
     mode: "0640"
+  become: yes
   notify: Restart EpicBook app
 
 - name: Ensure app root ownership
@@ -118,55 +169,82 @@
     path: "{{ app_dest }}"
     owner: "{{ app_user }}"
     group: "{{ app_group }}"
+    recurse: true
+  become: yes
+
+- name: Fix config.json ownership and permissions
+  file:
+    path: "{{ app_dest }}/config/config.json"
+    owner: "{{ app_user }}"
+    group: "{{ app_group }}"
+    mode: "0640"
+  become: yes
 
 - name: Install pm2 globally
   npm:
     name: pm2
     global: true
+  become: yes
 
-- name: Create pm2 home directory for user
+- name: Create pm2 home directory for app user
   file:
-    path: /var/www/.pm2
+    path: "{{ pm2_home }}"
     state: directory
     owner: "{{ app_user }}"
     group: "{{ app_group }}"
     mode: "0755"
-  become: true
+  become: yes
+
+- name: Create .ansible tmp directory for app user
+  file:
+    path: /var/www/.ansible/tmp
+    state: directory
+    owner: "{{ app_user }}"
+    group: "{{ app_group }}"
+    mode: "0755"
+    recurse: true
+  become: yes
 
 - name: Check PM2 process state
   command: pm2 describe epicbook
   register: pm2_process
   changed_when: false
   failed_when: false
-  become: true
+  become: yes
   become_user: "{{ app_user }}"
   environment:
-    PM2_HOME: /var/www/.pm2
+    PM2_HOME: "{{ pm2_home }}"
+    HOME: "/home/{{ app_user }}"
 
 - name: Start app with pm2 if missing
-  command: pm2 start server.js --name epicbook
+  command: pm2 start server.js --name epicbook --update-env
   args:
     chdir: "{{ app_dest }}"
   when: pm2_process.rc != 0
+  become: yes
+  become_user: "{{ app_user }}"
   environment:
     PORT: "{{ app_port }}"
-    PM2_HOME: /var/www/.pm2
-  become: true
-  become_user: "{{ app_user }}"
+    PM2_HOME: "{{ pm2_home }}"
+    HOME: "/home/{{ app_user }}"
+  register: pm2_start
+  failed_when: pm2_start.rc != 0
 
 - name: Save pm2 process list after first start
   command: pm2 save
   when: pm2_process.rc != 0
   changed_when: false
-  become: true
+  become: yes
   become_user: "{{ app_user }}"
   environment:
-    PM2_HOME: /var/www/.pm2
+    PM2_HOME: "{{ pm2_home }}"
+    HOME: "/home/{{ app_user }}"
 
 - name: Configure pm2 to start on boot
-  command: pm2 startup systemd -u {{ app_user }} --hp /var/www/.pm2
+  command: pm2 startup systemd -u {{ app_user }} --hp "/home/{{ app_user }}"
   args:
     creates: /etc/systemd/system/pm2-{{ app_user }}.service
-  become: true
+  become: yes
   environment:
-    PM2_HOME: /var/www/.pm2
+    PM2_HOME: "{{ pm2_home }}"
+    HOME: "/home/{{ app_user }}"

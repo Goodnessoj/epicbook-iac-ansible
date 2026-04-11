@@ -1,3 +1,0 @@
----
-# Copy to ansible/group_vars/web/vault.yml and encrypt with ansible-vault.
-db_password: "REPLACE_WITH_STRONG_PASSWORD"

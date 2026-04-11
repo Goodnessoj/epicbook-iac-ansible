@@ -4,6 +4,16 @@ resource "aws_key_pair" "main" {
   public_key = file(pathexpand(var.ssh_public_key_path))
 }
 
+locals {
+  ansible_web_vars_file = "${path.module}/../../ansible/group_vars/web.yml"
+
+  # Keep existing app vars and replace only db_host on each apply.
+  ansible_web_vars_existing        = fileexists(local.ansible_web_vars_file) ? file(local.ansible_web_vars_file) : "---\n"
+  ansible_web_vars_without_db_host = trimspace(regexreplace(local.ansible_web_vars_existing, "(?m)^db_host\\s*:.*\\n?", ""))
+  ansible_web_vars_base            = local.ansible_web_vars_without_db_host != "" ? "${local.ansible_web_vars_without_db_host}\n" : "---\n"
+  ansible_web_vars_content         = "${local.ansible_web_vars_base}db_host: \"${aws_db_instance.main.address}\"\n"
+}
+
 # VPC
 resource "aws_vpc" "main" {
   cidr_block           = "10.0.0.0/16"
@@ -216,10 +226,7 @@ EOT
 
 # Ansible Group Variables Generation
 resource "local_file" "ansible_web_group_vars" {
-  content = <<EOT
----
-db_host: "${aws_db_instance.main.address}"
-EOT
+  content = local.ansible_web_vars_content
 
-  filename = "../../ansible/group_vars/web.yml"
+  filename = local.ansible_web_vars_file
 }

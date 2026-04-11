@@ -1,6 +1,5 @@
 # Ansible sensitive files
 ansible/.vault_pass
-inventory.ini
 .vault_pass
 
 # Node dependencies
